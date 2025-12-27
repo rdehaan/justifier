@@ -462,6 +462,9 @@ def program_guess(
             dominates_in_profile(Prof,C1,C2), candidate(C1), C1 != C2.
 
         % TODO: some redundant constraints?
+        % IDEA: make it pareto(C1,C2), to indicate which is the *dominating*
+        % candidate; this might make it more efficient to add
+        % redundant constraints
 
         is_used(pareto) :- use_axiom_instance(Pr,pareto(C)).
         """,
@@ -473,6 +476,9 @@ def program_guess(
             pos_axiom_instance(single(Prof),faithfulness),
             active_profile(Prof),
             active_voter(Prof,1), not active_voter(Prof,2).
+
+        :- axiom_applicable(single(Prof),faithfulness),
+            active_voter(Prof,V), V > 1.
 
         % TODO: some redundant constraints?
 
@@ -486,6 +492,10 @@ def program_guess(
             pos_axiom_instance(single(Prof),unanimity),
             active_profile(Prof), candidate(C),
             profile(Prof,V,C,1) : active_voter(Prof,V).
+
+        :- axiom_applicable(single(Prof),unanimity),
+            profile(Prof,V1,C1,1),
+            profile(Prof,V2,C2,1), V1 < V2, C1 != C2.
 
         % TODO: some redundant constraints?
 
@@ -528,6 +538,16 @@ def program_guess(
                 cancellation_identical_pair(Prof,V1,V2);
             votes_flipped(Prof,V1,V2) : cancellation_flipped_pair(Prof,V1,V2).
 
+        :- axiom_applicable(single(Prof),cancellation),
+            active_voter(Prof,V), not active_voter(Prof,V+1),
+            V \\ 2 == 1.
+        %:- axiom_applicable(single(Prof),cancellation),
+        %    active_voter(Prof,V1),
+        %    active_voter(Prof,V2), V1 < V2,
+        %    active_voter(Prof,V3), V2 < V3,
+        %    profile(Prof,V1,C,P1), profile(Prof,V2,C,P2),
+        %    profile(Prof,V3,C,P3), P1 != P2, P1 != P3, P2 != P3.
+
         % TODO: some redundant constraints?
 
         is_used(cancellation) :- use_axiom_instance(Pr,cancellation).
@@ -553,7 +573,10 @@ def program_guess(
             reinforcement_count_check(triple(Prof1,Prof2,Prof3),V) :
                 active_voter(Prof3,V).
 
-        % TODO: some redundant constraints?
+        % TODO: some more redundant constraints?
+        :- axiom_applicable(triple(Prof1,Prof2,Prof3),reinforcement),
+            active_voter(Prof1,V1), active_voter(Prof2,V2),
+            V1 + V2 > num_voters.
 
         is_used(reinforcement) :- use_axiom_instance(Pr,reinforcement).
         """,
@@ -576,8 +599,6 @@ def program_guess(
             pos_axiom_instance(single(Prof),condorcet(C1)),
             active_profile(Prof),
             majority_beats(Prof,C1,C2) : candidate(C2), C1 != C2.
-
-        % TODO: some redundant constraints?
 
         is_used(condorcet) :- use_axiom_instance(Pr,condorcet(C)).
         """,
@@ -638,23 +659,39 @@ def program_guess(
             profile_num(Prof), voter(V), active_voter(Prof,I), I < V.
         ith_voter_modulo_vote(Prof,V,I,I+1) :-
             profile_num(Prof), voter(V), active_voter(Prof,I+1), I >= V.
-        profiles_identical_modulo_two_votes_up_to(Prof1,V1,Prof2,V2,0) :-
-            profile_num(Prof1), voter(V1), active_voter(Prof1,V1),
-            profile_num(Prof2), voter(V2), active_voter(Prof2,V2).
-        profiles_identical_modulo_two_votes_up_to(Prof1,V1,Prof2,V2,N) :-
-            profile_num(Prof1), voter(V1), active_voter(Prof1,V1),
-            profile_num(Prof2), voter(V2), active_voter(Prof2,V2),
-            profiles_identical_modulo_two_votes_up_to(Prof1,V1,Prof2,V2,N-1),
-            ith_voter_modulo_vote(Prof1,V1,N,W1),
-            ith_voter_modulo_vote(Prof2,V2,N,W2),
-            votes_identical(Prof1,W1,Prof2,W2).
+        %profiles_identical_modulo_two_votes_up_to(Prof1,V1,Prof2,V2,0) :-
+        %    profile_num(Prof1), voter(V1), active_voter(Prof1,V1),
+        %    profile_num(Prof2), voter(V2), active_voter(Prof2,V2).
+        %profiles_identical_modulo_two_votes_up_to(Prof1,V1,Prof2,V2,N) :-
+        %    profile_num(Prof1), voter(V1), active_voter(Prof1,V1),
+        %    profile_num(Prof2), voter(V2), active_voter(Prof2,V2),
+        %    profiles_identical_modulo_two_votes_up_to(Prof1,V1,Prof2,V2,N-1),
+        %    ith_voter_modulo_vote(Prof1,V1,N,W1),
+        %    ith_voter_modulo_vote(Prof2,V2,N,W2),
+        %    votes_identical(Prof1,W1,Prof2,W2).
+        %profiles_identical_modulo_two_votes(Prof1,V1,Prof2,V2) :-
+        %    profile_num(Prof1), active_voter(Prof1,W),
+        %    not active_voter(Prof1,W+1),
+        %    profile_num(Prof2), active_voter(Prof2,W),
+        %    not active_voter(Prof2,W+1),
+        %    active_voter(Prof1,V1), active_voter(Prof2,V2),
+        %    profiles_identical_modulo_two_votes_up_to(Prof1,V1,Prof2,V2,W-1).
         profiles_identical_modulo_two_votes(Prof1,V1,Prof2,V2) :-
             profile_num(Prof1), active_voter(Prof1,W),
             not active_voter(Prof1,W+1),
             profile_num(Prof2), active_voter(Prof2,W),
             not active_voter(Prof2,W+1),
             active_voter(Prof1,V1), active_voter(Prof2,V2),
-            profiles_identical_modulo_two_votes_up_to(Prof1,V1,Prof2,V2,W-1).
+            votes_identical(Prof1,W1,Prof2,W2) :
+                ith_voter_modulo_vote(Prof1,V1,N,W1),
+                ith_voter_modulo_vote(Prof2,V2,N,W2).
+        axiom_applicable(double(Prof1,Prof2),pos_responsiveness(V1,V2,C,P)) :-
+            use_axiom(pos_responsiveness),
+            pos_axiom_instance(double(Prof1,Prof2),
+                pos_responsiveness(V1,V2,C,P)),
+            active_profile(Prof1), active_profile(Prof2),
+            votes_identical_after_upwards_move(Prof1,V1,Prof2,V2,C,P),
+            profiles_identical_modulo_two_votes(Prof1,V1,Prof2,V2).
         axiom_applicable(double(Prof1,Prof2),pos_responsiveness(V1,V2,C,P)) :-
             use_axiom(pos_responsiveness),
             pos_axiom_instance(double(Prof1,Prof2),
@@ -678,6 +715,18 @@ def program_guess(
             |P1-P2| > 1.
         :- axiom_applicable(double(Prof1,Prof2),pos_responsiveness(V1,V2,C,P)),
             profile(Prof1,V1,C,P), profile(Prof2,V2,C,P).
+
+        % TODO: test efficiency of this.. :)
+        :- axiom_applicable(double(Prof1,Prof2),pos_responsiveness(V1,V2,C,P)),
+            ith_voter_modulo_vote(Prof1,V1,I,J1),
+            ith_voter_modulo_vote(Prof2,V2,I,J2),
+            profile(Prof1,J1,C',P'),
+            not profile(Prof2,J2,C',P').
+        :- axiom_applicable(double(Prof1,Prof2),pos_responsiveness(V1,V2,C,P)),
+            ith_voter_modulo_vote(Prof1,V1,I,J1),
+            ith_voter_modulo_vote(Prof2,V2,I,J2),
+            profile(Prof2,J2,C',P'),
+            not profile(Prof1,J1,C',P').
 
         is_used(pos_responsiveness) :-
             use_axiom_instance(Pr,pos_responsiveness(V1,V2,C,P)).
@@ -961,33 +1010,68 @@ def program_guess(
         profile_used(Prof) :- use_axiom_instance(triple(_,_,Prof),_).
         :- active_profile(Prof), not profile_used(Prof).
 
-        %%% Symmetry breaking: only use profiles that are connected to the target
+        %%% Symmetry breaking: only use profiles that are
+        %%% connected to the target
+        profile_edge(Prof,Prof,Axiom) :-
+            use_axiom_instance(single(Prof),Axiom).
+        profile_edge(Prof1,Prof2,Axiom) :-
+            use_axiom_instance(double(Prof1,Prof2),Axiom).
+        profile_edge(Prof1,Prof2,Axiom) :-
+            use_axiom_instance(triple(Prof1,Prof2,_),Axiom).
+        profile_edge(Prof1,Prof2,Axiom) :-
+            use_axiom_instance(triple(Prof1,_,Prof2),Axiom).
+        profile_edge(Prof1,Prof2,Axiom) :-
+            use_axiom_instance(triple(_,Prof1,Prof2),Axiom).
+        profile_edge(Prof1,Prof2,Axiom) :-
+            profile_edge(Prof2,Prof1,Axiom).
         profile_connected(1).
-        profile_connected(Prof1) :-
-            profile_connected(Prof2),
-            use_axiom_instance(double(Prof1,Prof2),_).
-        profile_connected(Prof1) :-
-            profile_connected(Prof2),
-            use_axiom_instance(double(Prof2,Prof1),_).
-        profile_connected(Prof1) :-
-            profile_connected(Prof2),
-            use_axiom_instance(triple(Prof1,Prof2,_),_).
-        profile_connected(Prof1) :-
-            profile_connected(Prof2),
-            use_axiom_instance(triple(Prof1,_,Prof2),_).
-        profile_connected(Prof1) :-
-            profile_connected(Prof2),
-            use_axiom_instance(triple(_,Prof1,Prof2),_).
-        profile_connected(Prof1) :-
-            profile_connected(Prof2),
-            use_axiom_instance(triple(Prof2,Prof1,_),_).
-        profile_connected(Prof1) :-
-            profile_connected(Prof2),
-            use_axiom_instance(triple(Prof2,_,Prof1),_).
-        profile_connected(Prof1) :-
-            profile_connected(Prof2),
-            use_axiom_instance(triple(_,Prof2,Prof1),_).
+        profile_connected(Prof2) :-
+            profile_connected(Prof1),
+            profile_edge(Prof1,Prof2,_).
         :- profile_used(Prof), not profile_connected(Prof).
+
+        %%% ENSURE NO LEAVES IN THE CONNECTIVITY GRAPH OF PROFILES
+        :- profile_edge(Prof1,Prof2,pos_responsiveness(_,_,_,_)),
+            Prof1 != Prof2,
+            not profile_edge(Prof1',Prof2,_) :
+                profile_num(Prof1'), Prof1 != Prof1'.
+        :- profile_edge(Prof1,Prof2,neutrality(_,_)),
+            Prof1 != Prof2,
+            not profile_edge(Prof1',Prof2,_) :
+                profile_num(Prof1'), Prof1 != Prof1'.
+        :- profile_edge(Prof1,Prof2,reinforcement),
+            Prof1 != Prof2,
+            not profile_edge(Prof1',Prof2,_) :
+                profile_num(Prof1'), Prof1 != Prof1'.
+
+        %%% Symmetry breaking: only use profiles that are
+        %%% connected to the target
+        % profile_connected(1).
+        % profile_connected(Prof1) :-
+        %     profile_connected(Prof2),
+        %     use_axiom_instance(double(Prof1,Prof2),_).
+        % profile_connected(Prof1) :-
+        %     profile_connected(Prof2),
+        %     use_axiom_instance(double(Prof2,Prof1),_).
+        % profile_connected(Prof1) :-
+        %     profile_connected(Prof2),
+        %     use_axiom_instance(triple(Prof1,Prof2,_),_).
+        % profile_connected(Prof1) :-
+        %     profile_connected(Prof2),
+        %     use_axiom_instance(triple(Prof1,_,Prof2),_).
+        % profile_connected(Prof1) :-
+        %     profile_connected(Prof2),
+        %     use_axiom_instance(triple(_,Prof1,Prof2),_).
+        % profile_connected(Prof1) :-
+        %     profile_connected(Prof2),
+        %     use_axiom_instance(triple(Prof2,Prof1,_),_).
+        % profile_connected(Prof1) :-
+        %     profile_connected(Prof2),
+        %     use_axiom_instance(triple(Prof2,_,Prof1),_).
+        % profile_connected(Prof1) :-
+        %     profile_connected(Prof2),
+        %     use_axiom_instance(triple(_,Prof2,Prof1),_).
+        % :- profile_used(Prof), not profile_connected(Prof).
 
         % %%% Redundant constraint: provide upper bound on
         % %%% number of profiles to use
@@ -1779,7 +1863,6 @@ def find_justification(
         print(f" {sum(propagator.num_conflicts)} ..")
 
 ### TODO'S:
-# - create Github repo
 # - come up with iterative solving strategy/function
 # - add comments
 #
@@ -1790,4 +1873,4 @@ def find_justification(
 # - think of and test heuristics
 # - (?) fix constant-rule built-in counterexample, depending on actual outcome
 #
-# - use dedicated propagator for pos respons.
+# - develop dedicated propagator for pos respons.
