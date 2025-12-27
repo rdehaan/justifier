@@ -252,11 +252,12 @@ def program_base(
         "pareto":
         """
         use_axiom(pareto).
-        axiom(pareto(C)) :- candidate(C),
+        axiom(pareto(C1,C2)) :-
+            candidate(C1), candidate(C2), C1 != C2,
             use_axiom(pareto).
-        pos_axiom_instance(single(Prof),pareto(C)) :-
+        pos_axiom_instance(single(Prof),pareto(C1,C2)) :-
             use_axiom(pareto),
-            profile_num(Prof), axiom(pareto(C)).
+            profile_num(Prof), axiom(pareto(C1,C2)).
         """,
         "faithfulness":
         """
@@ -445,28 +446,19 @@ def program_guess(
         "pareto":
         """
         %%% Applicability of PARETO
-        dominates_in_voter(Prof,V,C1,C2) :-
+        axiom_applicable(single(Prof),pareto(C1,C2)) :-
             use_axiom(pareto),
-            profile_num(Prof), active_voter(Prof,V),
-            candidate(C1), candidate(C2), C1 != C2,
-            profile(Prof,V,C1,P1), profile(Prof,V,C2,P2), P1 < P2.
-        dominates_in_profile(Prof,C1,C2) :-
-            use_axiom(pareto),
-            profile_num(Prof),
-            candidate(C1), candidate(C2), C1 != C2,
-            dominates_in_voter(Prof,V,C1,C2) : active_voter(Prof,V).
-        axiom_applicable(single(Prof),pareto(C2)) :-
-            use_axiom(pareto),
-            pos_axiom_instance(single(Prof),pareto(C2)),
+            pos_axiom_instance(single(Prof),pareto(C1,C2)),
             active_profile(Prof),
-            dominates_in_profile(Prof,C1,C2), candidate(C1), C1 != C2.
+            P1 < P2 : profile(Prof,V,C1,P1), profile(Prof,V,C2,P2),
+                active_voter(Prof,V).
 
-        % TODO: some redundant constraints?
-        % IDEA: make it pareto(C1,C2), to indicate which is the *dominating*
-        % candidate; this might make it more efficient to add
-        % redundant constraints
+        :- axiom_applicable(single(Prof),pareto(C1,C2)),
+            active_voter(Prof,V),
+            profile(Prof,V,C1,P1), profile(Prof,V,C2,P2),
+            P2 < P1.
 
-        is_used(pareto) :- use_axiom_instance(Pr,pareto(C)).
+        is_used(pareto) :- use_axiom_instance(Pr,pareto(C1,C2)).
         """,
         "faithfulness":
         """
@@ -956,7 +948,7 @@ def program_guess(
         """
         rule_out(constant(C)) :-
             candidate(C), not unique_target_outcome(C),
-            use_axiom_instance(single(Prof),pareto(C)).
+            use_axiom_instance(single(Prof),pareto(_,C)).
         """,
         "unanimity":
         """
@@ -1283,9 +1275,9 @@ def program_check_not_all_instances(
     if "pareto" in axioms:
         program += """
             %%% PARETO
-            falsified(pos_axiom_instance(single(Prof),pareto(C))) :-
-                pos_axiom_instance(single(Prof),pareto(C)),
-                outcome(Prof,C).
+            falsified(pos_axiom_instance(single(Prof),pareto(C1,C2))) :-
+                pos_axiom_instance(single(Prof),pareto(C1,C2)),
+                outcome(Prof,C2).
         """
     if "faithfulness" in axioms:
         program += """
@@ -1441,8 +1433,8 @@ def program_check_all_instances(
     if "pareto" in axioms:
         program += """
             %%% PARETO
-            :- use_axiom_instance(single(Prof),pareto(C)),
-                outcome(Prof,C).
+            :- use_axiom_instance(single(Prof),pareto(C1,C2)),
+                outcome(Prof,C2).
         """
     if "faithfulness" in axioms:
         program += """
@@ -1651,7 +1643,7 @@ def model_to_justification(
             profile_info[(profile_num, vote, position)] = candidate
         if atom.name == "use_axiom_instance":
             if atom.arguments[1].name == "pareto":
-                idx = atom.arguments[1].arguments[0].number
+                idx = atom.arguments[1].arguments[1].number
                 candidate = idx_to_candidate[idx]
                 profile_num = atom.arguments[0].arguments[0].number
                 instance = ("pareto", candidate, profile_num)
