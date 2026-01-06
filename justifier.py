@@ -441,6 +441,9 @@ def program_guess(
         num_votes_identical(Prof1,V1,Prof2,N) :-
             profile_num(Prof1), profile_num(Prof2), voter(V1),
             N = #count { V2 : voter(V2), votes_identical(Prof1,V1,Prof2,V2) }.
+
+        %1 { num_active_voters(Prof,1..num_voters) } 1 :-
+        %    profile_num(Prof).
     """
     program += program_parts_based_on_axioms({
         "pareto":
@@ -1216,6 +1219,7 @@ def program_size_bounds(profile_size_bounds):
         if bound:
             program += f"""
                 :- active_voter({profile_num},{bound+1}).
+                %1 {{ num_active_voters({profile_num},1..{bound}) }} 1.
             """
     return program
 
@@ -1533,6 +1537,24 @@ def program_check_all_instances(
     return program
 
 
+def program_fixed_profiles(
+    profiles,
+    candidate_to_idx,
+):
+    program = ""
+    for profile_num, profile in enumerate(profiles, 2):
+        if profile:
+            for voter_num, vote in enumerate(profile, 1):
+                for position, candidate in enumerate(vote, 1):
+                    program += f"profile({profile_num},{voter_num},"
+                    program += f"{candidate_to_idx[candidate]},"
+                    program += f"{position}).\n"
+            program += f":- active_voter({profile_num},{len(profile)+1}).\n"
+    program += f":- active_profile({len(profiles)+2}).\n"
+    print(program)
+    return program
+
+
 def nondominated_outcomes(profile, candidates):
     outcomes = set()
     for candidate1 in candidates:
@@ -1724,6 +1746,7 @@ def find_justification(
     base_timeout=None,
     subseq_timeout=None,
     profile_size_bounds=None,
+    fixed_profiles=None,
     additional_code=None,
 ):
 
@@ -1772,6 +1795,11 @@ def find_justification(
         candidates,
         num_axiom_instances=num_axiom_instances,
     )
+    if fixed_profiles:
+        program += program_fixed_profiles(
+            fixed_profiles,
+            candidate_to_idx,
+        )
     program += program_heuristics(axioms)
     if profile_size_bounds:
         program += program_size_bounds(profile_size_bounds)
@@ -1845,9 +1873,12 @@ def find_justification(
             else:
                 timeout = -1
 
-            print(f"== Justification {solution_num} ==\n")
-            print(f"{pretty_justification(profiles, instances)}")
+            if verbose:
+                print(f"== Justification {solution_num} ==\n")
+                print(f"{pretty_justification(profiles, instances)}")
             solution_num += 1
+
+            yield profiles, instances
 
     if verbose:
         print(f".. Total time: {control.statistics['summary']['times']['total']:.2f} seconds ..")
