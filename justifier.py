@@ -1974,6 +1974,32 @@ def find_justification_auto(
             profiles, instances = results[0]
             break
 
+    #
+    num_instances = len(profiles)
+
+    while True:
+        if verbose:
+            print(f"~~ Trying with {num_instances} ~~")
+        results = list(find_justification(
+            target_profile,
+            target_outcomes,
+            axioms,
+            num_voters=num_voters,
+            num_profiles=len(profiles),
+            num_axiom_instances=num_instances,
+            verbose=verbose,
+            num_solutions=1,
+            base_timeout=timeout,
+            subseq_timeout=timeout,
+            fixed_profiles=profiles[1:],
+        ))
+        if results:
+            if verbose:
+                print("~~ Result found ~~")
+            profiles, instances = results[0]
+            break
+        num_instances += 1
+
     return profiles, instances
 
 
