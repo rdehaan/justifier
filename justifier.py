@@ -1,6 +1,8 @@
 from collections import defaultdict
 from typing import Sequence, Tuple, List
 
+from math import ceil
+
 from clingo import ast
 from clingo.ast import ProgramBuilder
 from clingo.control import Control
@@ -1213,14 +1215,25 @@ def program_heuristics(axioms):
     return program
 
 
-def program_size_bounds(profile_size_bounds):
+def program_size_bounds(upper_bounds):
     program = ""
-    for profile_num, bound in enumerate(profile_size_bounds, 2):
+    for profile_num, bound in enumerate(upper_bounds, 2):
         if bound:
             program += f"""
                 :- active_voter({profile_num},{bound+1}).
                 %1 {{ num_active_voters({profile_num},1..{bound}) }} 1.
             """
+    return program
+
+
+def program_size_lower_bounds(lower_bounds):
+    program = ""
+    for profile_num, bound in enumerate(lower_bounds, 2):
+        if bound:
+            program += f"""
+                lower_bound_reached :- active_voter({profile_num},{bound}).
+            """
+    program += ":- not lower_bound_reached.\n"
     return program
 
 
@@ -1551,7 +1564,6 @@ def program_fixed_profiles(
                     program += f"{position}).\n"
             program += f":- active_voter({profile_num},{len(profile)+1}).\n"
     program += f":- active_profile({len(profiles)+2}).\n"
-    print(program)
     return program
 
 
@@ -1746,6 +1758,7 @@ def find_justification(
     base_timeout=None,
     subseq_timeout=None,
     profile_size_bounds=None,
+    profile_size_lower_bounds=None,
     fixed_profiles=None,
     additional_code=None,
 ):
@@ -1803,6 +1816,8 @@ def find_justification(
     program += program_heuristics(axioms)
     if profile_size_bounds:
         program += program_size_bounds(profile_size_bounds)
+    if profile_size_lower_bounds:
+        program += program_size_lower_bounds(profile_size_lower_bounds)
     program += program_glue()
     program += program_check(
         axioms,
@@ -1884,6 +1899,83 @@ def find_justification(
         print(f".. Total time: {control.statistics['summary']['times']['total']:.2f} seconds ..")
         print(".. Total number of refinements:", end='')
         print(f" {sum(propagator.num_conflicts)} ..")
+
+
+def size_bound_generator(
+    init_num_voters,
+    init_num_profiles,
+):
+    num_voters = init_num_voters
+    num_profiles = init_num_profiles
+
+    size_bounds = list(
+        range(num_voters-num_profiles+1, num_voters+1)
+    )
+    yield None, size_bounds
+
+    while True:
+        if size_bounds == [num_voters] * num_profiles:
+            num_voters += 1
+            num_profiles += 1
+            size_bounds = list(
+                range(num_voters-num_profiles+1, num_voters+1)
+            )
+            prev_size_bounds = [0]*(len(size_bounds)-1) + [num_voters]
+            yield prev_size_bounds, size_bounds
+        else:
+            prev_size_bounds = size_bounds
+            size_bounds = [
+                min([b+1,num_voters])
+                for b in size_bounds
+            ]
+            yield prev_size_bounds, size_bounds
+
+
+def find_justification_auto(
+    target_profile,
+    target_outcomes,
+    axioms,
+    verbose=True,
+    timeout=None,
+):
+
+    initial_num_voters = ceil(len(target_profile)/2)
+    initial_num_voters = max(initial_num_voters, 3)
+    initial_num_profiles = initial_num_voters-1
+    initial_num_profiles = max(initial_num_profiles, 3)
+
+    for lower_bounds, upper_bounds in size_bound_generator(
+        initial_num_voters,
+        initial_num_profiles,
+    ):
+
+        num_voters = max(upper_bounds + [len(target_profile)])
+
+        if verbose:
+            print(f"~~ Trying with {upper_bounds} & {lower_bounds} ~~")
+
+        results = list(find_justification(
+            target_profile,
+            target_outcomes,
+            axioms,
+            num_voters=num_voters,
+            num_profiles=len(upper_bounds)+1,
+            num_axiom_instances=None,
+            verbose=verbose,
+            num_solutions=1,
+            base_timeout=timeout,
+            subseq_timeout=timeout,
+            profile_size_bounds=upper_bounds,
+            profile_size_lower_bounds=lower_bounds,
+        ))
+        if results:
+            if verbose:
+                print("~~ Result found ~~")
+            profiles, instances = results[0]
+            break
+
+    return profiles, instances
+
 
 ### TODO'S:
 # - come up with iterative solving strategy/function
